@@ -1,46 +1,59 @@
+// app/api/fetch-report/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(req: NextRequest) {
+  console.log("running");
+
   try {
     const token = process.env.BROWSERLESS_TOKEN;
     const url = process.env.TARGET_URL;
-
-    console.log("runing");
 
     if (!token || !url) {
       return NextResponse.json({ error: "Missing config" }, { status: 500 });
     }
 
-    // Use Browserless Content API to render JS
+    // Browserless Function API code
+    const code = `
+      export default async ({ page, context }) => {
+        await page.goto(context.url, { waitUntil: 'networkidle2' });
+        const data = await page.evaluate(() => {
+          // Grab the JS-rendered data
+          return window.__NEXT_DATA__ || { html: document.body.innerText };
+        });
+        return { data, type: 'application/json' };
+      };
+    `;
+
     const res = await fetch(
-      `https://chrome.browserless.io/content?token=${token}&url=${encodeURIComponent(
-        url,
-      )}`,
-      { method: "GET" },
+      `https://production-sfo.browserless.io/function?token=${token}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          code,
+          context: { url },
+        }),
+      },
     );
 
     if (!res.ok) {
+      const text = await res.text();
       return NextResponse.json(
-        { error: "Failed to fetch page" },
-        { status: 500 },
+        { error: "Browserless request failed", details: text },
+        { status: res.status },
       );
     }
 
-    const text = await res.text();
+    const result = await res.json();
 
-    // The page returns the JSON inside <body>, parse it
-    const bodyMatch = text.match(/{.*}/s);
-    if (!bodyMatch) {
-      return NextResponse.json(
-        { error: "No JSON found in page" },
-        { status: 500 },
-      );
-    }
+    console.log(
+      "BROWSERLESS RESPONSE DATA:",
+      JSON.stringify(result.data).slice(0, 500),
+    );
 
-    const data = JSON.parse(bodyMatch[0]);
-
-    return NextResponse.json(data, { status: 200 });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return NextResponse.json(result.data, { status: 200 });
   } catch (err: any) {
     console.error("Weekly report fetch error:", err);
     return NextResponse.json(
