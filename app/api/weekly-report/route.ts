@@ -5,6 +5,8 @@ export async function GET(req: NextRequest) {
     const token = process.env.BROWSERLESS_TOKEN;
     const url = process.env.TARGET_URL;
 
+    console.log("runing");
+
     if (!token || !url) {
       return NextResponse.json({ error: "Missing config" }, { status: 500 });
     }
