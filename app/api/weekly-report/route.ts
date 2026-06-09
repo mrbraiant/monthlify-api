@@ -1,52 +1,49 @@
-import { chromium } from "playwright-core";
-import chromiumPkg from "@sparticuz/chromium";
+import { NextRequest, NextResponse } from "next/server";
 
-export const runtime = "nodejs";
-
-export async function GET() {
-  let browser = null;
-
+export async function GET(req: NextRequest) {
   try {
-    const executablePath = await chromiumPkg.executablePath();
+    const token = process.env.BROWSERLESS_TOKEN;
+    const url = process.env.TARGET_URL;
 
-    browser = await chromium.launch({
-      args: chromiumPkg.args,
-      executablePath,
-      headless: true,
-    });
-
-    const page = await browser.newPage();
-
-    await page.goto(
-      "https://monthlify.base44.app/weekly-report?project_id=6a172d8cbb524343154cf5b1",
-      {
-        waitUntil: "networkidle",
-        timeout: 30000,
-      },
-    );
-
-    const jsonText = await page.evaluate(() => document.body.textContent);
-
-    if (!jsonText) {
-      throw new Error("No body content found");
+    if (!token || !url) {
+      return NextResponse.json({ error: "Missing config" }, { status: 500 });
     }
 
-    const data = JSON.parse(jsonText.trim());
+    // Use Browserless Content API to render JS
+    const res = await fetch(
+      `https://chrome.browserless.io/content?token=${token}&url=${encodeURIComponent(
+        url,
+      )}`,
+      { method: "GET" },
+    );
 
-    return new Response(JSON.stringify(data), {
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
+    if (!res.ok) {
+      return NextResponse.json(
+        { error: "Failed to fetch page" },
+        { status: 500 },
+      );
+    }
+
+    const text = await res.text();
+
+    // The page returns the JSON inside <body>, parse it
+    const bodyMatch = text.match(/{.*}/s);
+    if (!bodyMatch) {
+      return NextResponse.json(
+        { error: "No JSON found in page" },
+        { status: 500 },
+      );
+    }
+
+    const data = JSON.parse(bodyMatch[0]);
+
+    return NextResponse.json(data, { status: 200 });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } catch (error: any) {
-    return new Response(
-      JSON.stringify({
-        error: error.message || "Failed to load report",
-      }),
+  } catch (err: any) {
+    console.error("Weekly report fetch error:", err);
+    return NextResponse.json(
+      { error: err.message || "Unknown error" },
       { status: 500 },
     );
-  } finally {
-    if (browser) await browser.close().catch(() => {});
   }
 }
