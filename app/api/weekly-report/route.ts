@@ -1,4 +1,3 @@
-// app/api/weekly-report/route.ts
 import { NextResponse } from "next/server";
 import { chromium } from "playwright-core";
 import chromiumBinary from "@sparticuz/chromium";
@@ -15,7 +14,7 @@ export async function GET() {
     browser = await chromium.launch({
       args: chromiumBinary.args,
       executablePath: await chromiumBinary.executablePath(),
-      headless: chromiumBinary.headless,
+      headless: true, // <-- fixed
     });
 
     const page = await browser.newPage();
@@ -31,6 +30,7 @@ export async function GET() {
     const data = JSON.parse(bodyText.trim());
 
     return NextResponse.json(data);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (error: any) {
     console.error("Weekly report error:", error.message || error);
     return NextResponse.json(
